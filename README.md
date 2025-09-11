@@ -1,4 +1,4 @@
-# PrimeBoard — Real-time Collaborative Kanban
+# PinBoard — Real-time Collaborative Kanban
 
 Lightweight, real-time collaborative Kanban board built with React + Node and Supabase/Postgres.  
 Features: boards, columns, cards, real-time sync (WebSockets), presence, notifications, audit logs.
