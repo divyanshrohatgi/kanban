@@ -9,6 +9,7 @@ const express_1 = __importDefault(require("express"));
 const http_1 = __importDefault(require("http"));
 const cors_1 = __importDefault(require("cors"));
 const morgan_1 = __importDefault(require("morgan"));
+const path_1 = __importDefault(require("path"));
 //import boardRoutes from "./routes/boardRoutes";
 const boardRoutes = require("./routes/boardRoutes").default || require("./routes/boardRoutes");
 const columnRoutes_1 = __importDefault(require("./routes/columnRoutes"));
@@ -33,6 +34,14 @@ app.use("/api/boards", boardRoutes);
 app.use("/api/columns", columnRoutes_1.default);
 app.use("/api/cards", cardRoutes);
 app.use("/api/notifications", notificationRoutes_1.default);
+const frontendDistPath = path_1.default.join(__dirname, '..', '..', 'frontend', 'dist');
+app.use(express_1.default.static(frontendDistPath));
+// The "catchall" handler: for any request that doesn't
+// match one of the API routes above, send back React's index.html file.
+// This is essential for client-side routing to work correctly.
+app.get('*', (req, res) => {
+    res.sendFile(path_1.default.join(frontendDistPath, 'index.html'));
+});
 // 404
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
 // Server + WebSockets

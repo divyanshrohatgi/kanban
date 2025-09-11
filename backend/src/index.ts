@@ -4,6 +4,7 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import morgan from "morgan";
+import path from "path";
 
 //import boardRoutes from "./routes/boardRoutes";
 const boardRoutes = require("./routes/boardRoutes").default || require("./routes/boardRoutes");
@@ -36,6 +37,16 @@ app.use("/api/boards", boardRoutes);
 app.use("/api/columns", columnRoutes);
 app.use("/api/cards", cardRoutes);
 app.use("/api/notifications", notificationRoutes);
+
+const frontendDistPath = path.join(__dirname, '..', '..', 'frontend', 'dist');
+app.use(express.static(frontendDistPath));
+
+// The "catchall" handler: for any request that doesn't
+// match one of the API routes above, send back React's index.html file.
+// This is essential for client-side routing to work correctly.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
