@@ -76,6 +76,9 @@ export const boardsAPI = {
   createColumn: (data: { boardId: string; title: string; position?: number }) =>
     api.post(`/columns`, data),
 
+  updateColumn: (id: string, data: { title?: string; position?: number }) =>
+    api.patch(`/columns/${id}`, data),
+
   deleteColumn: (id: string) => api.delete(`/columns/${id}`),
 
   createCard: (
@@ -93,7 +96,7 @@ export const boardsAPI = {
 
   updateCard: (
     id: string,
-    data: { title?: string; description?: string | null; assigneeId?: string | null; labels?: string[]; dueDate?: string | null; version?: number }
+    data: { title?: string; description?: string | null; assigneeId?: string | null; labels?: string[]; due_date?: string | null; version?: number }
   ) => api.patch(`/cards/${id}`, data),
 
   moveCard: (

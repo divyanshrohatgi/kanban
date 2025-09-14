@@ -13,7 +13,7 @@ import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { BoardsPage } from "./pages/kanban/BoardsPage";
-import { BoardPage } from "./pages/kanban/BoardPage.tsx";
+import BoardPage from "./pages/kanban/BoardPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import { Toaster } from "sonner"; // ✅ fixed import
 import "./App.css";

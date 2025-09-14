@@ -168,4 +168,17 @@ export class BoardService {
 
     if (error) throw new Error(error.message);
   }
+
+  /**
+   * Get all members of a board.
+   */
+  static async getBoardMembers(boardId: string) {
+    const { data, error } = await supabase
+      .from("board_members")
+      .select("user_id, role")
+      .eq("board_id", boardId);
+
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  }
 }

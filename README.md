@@ -2,7 +2,7 @@
 
 A modern, real-time collaborative Kanban board built with React, Node.js, and WebSockets. Features drag & drop cards, live collaboration, presence tracking, and notifications.
 
-## ✨ Features
+## Features
 
 - **Kanban Boards**: Create and manage multiple boards with columns and cards
 - **Drag & Drop**: Move cards between columns with smooth animations
@@ -14,7 +14,6 @@ A modern, real-time collaborative Kanban board built with React, Node.js, and We
 ## Technologies Used
 
 ### Frontend
-
 - **React:** A JavaScript library for building user interfaces.
 - **TypeScript:** A typed superset of JavaScript that compiles to plain JavaScript.
 - **Vite:** A fast build tool for modern web projects.
@@ -25,7 +24,6 @@ A modern, real-time collaborative Kanban board built with React, Node.js, and We
 - **Socket.IO Client:** For real-time communication.
 
 ### Backend
-
 - **Node.js:** JavaScript runtime built on Chrome's V8 JavaScript engine.
 - **Express.js:** Fast, unopinionated, minimalist web framework for Node.js.
 - **TypeScript:** For type-safe backend development.
@@ -35,24 +33,22 @@ A modern, real-time collaborative Kanban board built with React, Node.js, and We
 - **SendGrid:** For email notifications.
 
 ### Deployment
-
 - **Docker:** Containerization platform for packaging the application.
 - **Render.com:** Cloud platform for deploying web services.
 
-## ⚙️ Local Setup & Development
+## Local Setup & Development
 
 Follow these steps to get PinBoard up and running on your local machine.
 
 ### Prerequisites
-
-- [Git]
+- [Git](https://git-scm.com/downloads)
 - [Node.js](https://nodejs.org/en/download/) (v18 or higher recommended)
 - [npm](https://www.npmjs.com/get-npm) (comes with Node.js)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine for Linux)
 - **Supabase Project:**
   - Create a new project on [Supabase](https://supabase.com/).
-  - Obtain your `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` from your project settings (API section).
-  - You will need to set up your database schema. The initial schema is typically found in `backend/supabase/migrations/20250115000000_initial_schema.sql`. You can use the Supabase CLI or SQL Editor to apply this.
+  - Obtain your `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` from your project settings.
+  - Apply your database schema with the Supabase CLI or SQL Editor.
 - **Upstash Redis Database:**
   - Create a new Redis database on [Upstash](https://upstash.com/).
   - Obtain your `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
@@ -61,11 +57,9 @@ Follow these steps to get PinBoard up and running on your local machine.
   - Obtain your `SENDGRID_API_KEY`.
 
 ### 1. Clone the Repository
-
 ```bash
 git clone <repository-url>
-cd auction-PrimeBid-main
-```
+cd kanban
 
 ### 2. Configure Environment Variables
 

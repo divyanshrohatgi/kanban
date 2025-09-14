@@ -107,7 +107,7 @@ const createCard: ValidatorFn = (req) => {
 };
 
 const updateCard: ValidatorFn = (req) => {
-  const { version, title, description, assigneeId, labels, dueDate } = req.body || {};
+  const { version, title, description, assigneeId, labels, due_date } = req.body || {};
   if (!isNonNegInt(version)) return "version is required and must be a non-negative integer";
   if (title != null && !isNonEmptyString(title, 200)) return "title must be a non-empty string (max 200)";
   if (description != null && !isNullableString(description, 8000))
@@ -119,7 +119,7 @@ const updateCard: ValidatorFn = (req) => {
       if (!isNonEmptyString(l, 32)) return "each label must be a non-empty string (max 32)";
     }
   }
-  if (dueDate != null && !isIsoDateString(dueDate)) return "dueDate must be an ISO datetime string";
+  if (due_date != null && !isIsoDateString(due_date)) return "due_date must be an ISO datetime string";
   return null;
 };
 
