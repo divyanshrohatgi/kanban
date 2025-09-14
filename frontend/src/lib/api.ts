@@ -93,7 +93,7 @@ export const boardsAPI = {
 
   updateCard: (
     id: string,
-    data: { title?: string; description?: string | null; assigneeId?: string | null; labels?: string[]; dueDate?: string | null; version?: number }
+    data: { title?: string; description?: string | null; assigneeId?: string | null; labels?: string[]; due_date?: string | null; version?: number }
   ) => api.patch(`/cards/${id}`, data),
 
   moveCard: (

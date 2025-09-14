@@ -180,12 +180,20 @@ const BoardPage: React.FC = () => {
         .flatMap(col => col.cards)
         .find(card => card.id === cardId);
       
-      const payload = {
-        title: updates.title,
-        description: updates.description || null,
-        dueDate: updates.due_date,
-        version: currentCard?.version || 1
+      if (!currentCard) {
+        throw new Error("Card not found");
+      }
+      
+      const payload: any = {
+        version: currentCard.version ?? 0
       };
+      
+      // Only include fields that are being updated
+      if (updates.title !== undefined) payload.title = updates.title;
+      if (updates.description !== undefined) payload.description = updates.description || null;
+      if (updates.due_date !== undefined) payload.due_date = updates.due_date;
+      
+      console.log("Sending card update payload:", payload);
       
       await boardsAPI.updateCard(cardId, payload);
       setBoard((prev) => {
@@ -194,7 +202,7 @@ const BoardPage: React.FC = () => {
           ...prev,
           columns: prev.columns.map((col) => ({
             ...col,
-            cards: col.cards.map((c) => (c.id === cardId ? { ...c, ...updates, version: (c.version || 1) + 1 } : c)),
+            cards: col.cards.map((c) => (c.id === cardId ? { ...c, ...updates, version: (c.version || 0) + 1 } : c)),
           })),
         };
       });
@@ -202,7 +210,8 @@ const BoardPage: React.FC = () => {
       localNotifs.add("Card updated");
     } catch (err: any) {
       console.error("Failed to update card:", err);
-      toast.error(err?.response?.data?.message || "Failed to update card");
+      console.error("Error response:", err?.response?.data);
+      toast.error(err?.response?.data?.error || "Failed to update card");
     }
   };
 
@@ -261,12 +270,13 @@ const BoardPage: React.FC = () => {
               <textarea
                 value={editingCard.description || ""}
                 onChange={(e) => {
-                  const newCard = { ...editingCard, description: e.target.value };
-                  setEditingCard(newCard);
+                  const newValue = e.target.value;
+                  setEditingCard(prev => prev ? { ...prev, description: newValue } : null);
                 }}
-                placeholder="Add a description..."
-                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows={4}
+                placeholder="Card description..."
+                style={{ minHeight: '100px' }}
               />
             </div>
             
