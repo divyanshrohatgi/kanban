@@ -281,11 +281,17 @@ export const NotificationsDropdown: React.FC = () => {
 
     notificationManager.addListener(listenerId, handleNotification);
 
+    // Subscribe to local store changes for real-time counter updates
+    const unsubscribe = localStore.subscribe?.(() => {
+      void syncUnread();
+    });
+
     // initial fetch
     void syncUnread();
 
     return () => {
       notificationManager.removeListener(listenerId);
+      unsubscribe?.();
     };
   }, [user?.id]);
 

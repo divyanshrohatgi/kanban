@@ -32,11 +32,38 @@ export function initSocket(httpServer: HttpServer) {
      * Join a board room and update presence.
      * payload: { boardId: string, userId: string }
      */
-    socket.on("join_board", async ({ boardId, userId }) => {
-      if (!boardId || !userId) return;
+    socket.on("join_board", ({ boardId, userId }) => {
+      console.log(`[Socket] User ${userId} joining board ${boardId}`);
       socket.join(`board:${boardId}`);
-      const users = await PresenceService.joinBoard(boardId, userId);
-      io!.to(`board:${boardId}`).emit("presence:update", { users });
+      socket.join(`user:${userId}`);
+      
+      // Notify others that user joined
+      socket.to(`board:${boardId}`).emit("user:joined", { 
+        id: userId, 
+        name: `User ${userId.slice(0, 8)}` 
+      });
+      
+      // Send current online users to the joining user
+      if (io) {
+        const room = io.sockets.adapter.rooms.get(`board:${boardId}`);
+        socket.emit("presence:update", { 
+          users: Array.from(room || []).map(socketId => {
+            const userSocket = io!.sockets.sockets.get(socketId);
+            return { 
+              id: userSocket?.data?.userId || socketId.slice(0, 8),
+              name: `User ${(userSocket?.data?.userId || socketId).slice(0, 8)}`
+            };
+          })
+        });
+      }
+    });
+
+    socket.on("leave_board", ({ boardId, userId }) => {
+      console.log(`[Socket] User ${userId} leaving board ${boardId}`);
+      socket.leave(`board:${boardId}`);
+      
+      // Notify others that user left
+      socket.to(`board:${boardId}`).emit("user:left", userId);
     });
 
     /**

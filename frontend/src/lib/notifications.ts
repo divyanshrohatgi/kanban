@@ -15,22 +15,47 @@ class NotificationManager {
   private isConnected = false;
   private currentBoardId: string | null = null;
 
+  getSocket() {
+    return this.socket;
+  }
+
   constructor() {
     this.connect();
   }
 
   private connect() {
-    // Connect directly to backend port
-    this.socket = io("http://localhost:5000", {
+    // Determine the correct backend URL
+    let backendUrl = import.meta.env.VITE_API_URL || 
+                    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+                      ? "http://localhost:5000" 
+                      : window.location.origin);
+    
+    // Remove /api suffix if present for socket connection
+    if (backendUrl.endsWith('/api')) {
+      backendUrl = backendUrl.slice(0, -4);
+    }
+    
+    console.log(`[NotificationManager] Connecting to: ${backendUrl}`);
+    
+    this.socket = io(backendUrl, {
       path: "/ws",
-      transports: ["polling"],
+      transports: ["websocket", "polling"],
       withCredentials: true,
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     this.socket.on("connect", () => {
       console.log("[NotificationManager] Connected to backend");
       this.isConnected = true;
+      // Re-join board if we were previously in one
+      if (this.currentBoardId) {
+        this.joinBoard(this.currentBoardId, '');
+      }
     });
 
     this.socket.on("disconnect", () => {
@@ -49,11 +74,25 @@ class NotificationManager {
   }
 
   joinBoard(boardId: string, userId: string) {
-    if (this.currentBoardId === boardId) return;
+    if (this.currentBoardId === boardId && this.isConnected) return;
     
     console.log(`[NotificationManager] Joining board: ${boardId}`);
     this.currentBoardId = boardId;
-    this.socket?.emit('join_board', { boardId, userId });
+    
+    if (this.socket) {
+      if (!this.socket.connected) {
+        console.log('[NotificationManager] Socket not connected, waiting for connection...');
+        const connectHandler = () => {
+          console.log('[NotificationManager] Socket connected, joining board...');
+          this.socket?.emit('join_board', { boardId, userId });
+          this.socket?.off('connect', connectHandler);
+        };
+        this.socket.on('connect', connectHandler);
+        this.socket.connect();
+      } else {
+        this.socket.emit('join_board', { boardId, userId });
+      }
+    }
   }
 
   leaveBoard(boardId: string, userId: string) {
@@ -63,7 +102,13 @@ class NotificationManager {
   }
 
   addListener(id: string, callback: (event: AuditEvent) => void) {
+    console.log(`[NotificationManager] Adding listener: ${id}`);
     this.listeners.set(id, callback);
+    
+    // Return cleanup function
+    return () => {
+      this.removeListener(id);
+    };
   }
 
   removeListener(id: string) {

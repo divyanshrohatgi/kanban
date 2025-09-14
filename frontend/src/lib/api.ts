@@ -76,6 +76,9 @@ export const boardsAPI = {
   createColumn: (data: { boardId: string; title: string; position?: number }) =>
     api.post(`/columns`, data),
 
+  updateColumn: (id: string, data: { title?: string; position?: number }) =>
+    api.patch(`/columns/${id}`, data),
+
   deleteColumn: (id: string) => api.delete(`/columns/${id}`),
 
   createCard: (

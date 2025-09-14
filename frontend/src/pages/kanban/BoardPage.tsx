@@ -2,9 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { boardsAPI } from "../../lib/api";
 import { Button } from "../../components/ui/button";
-import { Plus, Edit3, Trash2, Calendar, User, X } from "lucide-react";
+import { Plus, Trash2, Calendar, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { ActivityPanel } from "../../components/notifications/ActivityPanel";
+import { PresenceIndicator } from "../../components/collaboration/PresenceIndicator";
 import { TeamDialog } from "../../components/kanban/TeamDialog";
 import { useAuth } from "../../contexts/AuthContext";
 import * as localNotifs from "../../components/notifications/store";
@@ -51,14 +52,13 @@ const BoardPage: React.FC = () => {
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingColumnTitle, setEditingColumnTitle] = useState("");
-  const [activeUsers] = useState<any[]>([]);
-  const [draggingCardId] = useState<string | null>(null);
   const [newCardTitle, setNewCardTitle] = useState("");
   const [addingCardToColumn, setAddingCardToColumn] = useState<string | null>(null);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
 
   // Sanitize id in case it contains accidental "id:" prefix
   const sanitizedId = (id || "").replace(/^id:\s*/i, "").trim();
+  const boardId = sanitizedId;
 
   const hasPriority = (labels?: string[], level?: "high" | "medium" | "low") => {
     if (!labels || !labels.length) return false;
@@ -71,12 +71,37 @@ const BoardPage: React.FC = () => {
         setLoading(true);
         setError("");
         const res = await boardsAPI.get(sanitizedId);
-        const raw: { id: string; title: string; columns?: Array<{ id: string; title: string; position?: number; cards?: Card[] }>; board_members?: Array<{ user_id: string; role: "owner" | "editor" | "viewer"; username?: string }>; } = res.data;
+        const raw: { 
+          id: string; 
+          title: string; 
+          columns?: Array<{ 
+            id: string; 
+            title: string; 
+            position?: number; 
+            cards?: Card[] 
+          }>; 
+          board_members?: Array<{ 
+            user_id: string; 
+            role: "owner" | "editor" | "viewer"; 
+            username?: string 
+          }>; 
+        } = res.data;
+        
         const normalizedColumns: Column[] = Array.isArray(raw?.columns)
-          ? raw.columns.map((c) => ({ id: c.id, title: c.title, position: c.position ?? 0, cards: Array.isArray(c?.cards) ? c.cards : [] }))
+          ? raw.columns.map((c) => ({ 
+              id: c.id, 
+              title: c.title, 
+              position: c.position ?? 0, 
+              cards: Array.isArray(c?.cards) ? c.cards : [] 
+            }))
           : [];
         normalizedColumns.sort((a, b) => a.position - b.position);
-        setBoard({ id: raw.id, title: raw.title, columns: normalizedColumns, board_members: raw.board_members });
+        setBoard({ 
+          id: raw.id, 
+          title: raw.title, 
+          columns: normalizedColumns, 
+          board_members: raw.board_members 
+        });
       } catch (err: any) {
         console.error("Failed to fetch board:", err);
         setError(err?.response?.data?.message || "Failed to load board");
@@ -90,55 +115,43 @@ const BoardPage: React.FC = () => {
   const addColumn = async () => {
     if (!newColumnTitle.trim() || !board) return;
     try {
-      setIsAddingColumn(true);
       const res = await boardsAPI.createColumn({ 
         boardId: board.id,
         title: newColumnTitle.trim(),
         position: board.columns.length 
       });
-      const newCol: Column = { id: res.data.id, title: res.data.title, position: res.data.position ?? board.columns.length, cards: [] };
-      setBoard((prev) => (prev ? { ...prev, columns: [...prev.columns, newCol] } : null));
+      const newCol: Column = { 
+        id: res.data.id, 
+        title: res.data.title, 
+        position: res.data.position ?? board.columns.length, 
+        cards: [] 
+      };
+      setBoard((prev) => prev ? { ...prev, columns: [...prev.columns, newCol] } : null);
       setNewColumnTitle("");
+      setIsAddingColumn(false);
       toast.success("Column added");
-      localNotifs.add(`Column created: ${newCol.title}`);
+      localNotifs.add("Column added");
     } catch (err: any) {
       console.error("Failed to add column:", err);
-      toast.error(err?.response?.data?.message || "Failed to add column");
-    } finally {
-      setIsAddingColumn(false);
+      toast.error("Failed to add column");
     }
   };
 
   const updateColumn = async (columnId: string, title: string) => {
     if (!title.trim()) return;
     try {
-      await fetch(`/api/columns/${columnId}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ title: title.trim() })
+      await boardsAPI.updateColumn(columnId, {
+        title: title.trim()
       });
-      setBoard((prev) => prev ? { ...prev, columns: prev.columns.map((c) => (c.id === columnId ? { ...c, title: title.trim() } : c)) } : null);
+      setBoard((prev) => prev ? { 
+        ...prev, 
+        columns: prev.columns.map((c) => (c.id === columnId ? { ...c, title: title.trim() } : c)) 
+      } : null);
       toast.success("Column updated");
       localNotifs.add("Column updated");
     } catch (err: any) {
       console.error("Failed to update column:", err);
       toast.error("Failed to update column");
-    }
-  };
-
-  const deleteColumn = async (columnId: string) => {
-    if (!confirm("Are you sure you want to delete this column? All cards in it will be deleted.")) return;
-    try {
-      await boardsAPI.deleteColumn(columnId);
-      setBoard((prev) => prev ? { ...prev, columns: prev.columns.filter((c) => c.id !== columnId) } : null);
-      toast.success("Column deleted");
-      localNotifs.add("Column deleted");
-    } catch (err: any) {
-      console.error("Failed to delete column:", err);
-      toast.error(err?.response?.data?.message || "Failed to delete column");
     }
   };
 
@@ -155,21 +168,20 @@ const BoardPage: React.FC = () => {
         if (!prev) return prev;
         return {
           ...prev,
-          columns: prev.columns.map((col) => {
-            if (col.id === columnId) {
-              return { ...col, cards: [...col.cards, newCard] };
-            }
-            return col;
-          }),
+          columns: prev.columns.map((col) => 
+            col.id === columnId 
+              ? { ...col, cards: [...col.cards, newCard] }
+              : col
+          ),
         };
       });
       setNewCardTitle("");
       setAddingCardToColumn(null);
-      toast.success("Card created");
-      localNotifs.add("Card created");
+      toast.success("Card added");
+      localNotifs.add("Card added");
     } catch (err: any) {
       console.error("Failed to add card:", err);
-      toast.error(err?.response?.data?.message || "Failed to add card");
+      toast.error("Failed to add card");
     }
   };
 
@@ -233,7 +245,7 @@ const BoardPage: React.FC = () => {
       localNotifs.add("Card deleted");
     } catch (err: any) {
       console.error("Failed to delete card:", err);
-      toast.error(err?.response?.data?.message || "Failed to delete card");
+      toast.error("Failed to delete card");
     }
   };
 
@@ -241,19 +253,21 @@ const BoardPage: React.FC = () => {
     if (!editingCard) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Edit Card</h2>
-            <button
-              onClick={() => setEditingCard(null)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Edit Card</h2>
+              <button
+                onClick={() => setEditingCard(null)}
+                className="text-gray-500 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
           
-          <div className="space-y-4">
+          <div className="p-6 space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
               <input
@@ -292,29 +306,25 @@ const BoardPage: React.FC = () => {
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
               />
             </div>
-            
-            <div className="flex gap-2 pt-4">
-              <Button
-                onClick={() => {
-                  updateCard(editingCard.id, {
-                    title: editingCard.title,
-                    description: editingCard.description,
-                    due_date: editingCard.due_date
-                  });
-                  setEditingCard(null);
-                }}
-                className="flex-1"
-              >
-                Save Changes
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setEditingCard(null)}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-            </div>
+          </div>
+          
+          <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+            <Button
+              onClick={() => setEditingCard(null)}
+              variant="outline"
+              className="px-6 py-2"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                updateCard(editingCard.id, editingCard);
+                setEditingCard(null);
+              }}
+              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+            >
+              Save Changes
+            </Button>
           </div>
         </div>
       </div>
@@ -352,23 +362,8 @@ const BoardPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {/* Active Users */}
-            {activeUsers.length > 0 && (
-              <div className="flex items-center gap-3 bg-white/60 rounded-full px-4 py-2 backdrop-blur-sm border border-gray-200/50">
-                <span className="text-sm font-medium text-gray-700">Active:</span>
-                <div className="flex -space-x-2">
-                  {activeUsers.slice(0, 5).map((u) => (
-                    <div key={u.id} className="w-9 h-9 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold border-3 border-white shadow-lg ring-2 ring-blue-100 hover:scale-110 transition-transform" title={u.username || u.id}>
-                      {(u.username || u.id).charAt(0).toUpperCase()}
-                    </div>
-                  ))}
-                  {activeUsers.length > 5 && (
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-r from-gray-400 to-gray-500 flex items-center justify-center text-white text-xs font-bold border-3 border-white shadow-lg">
-                      +{activeUsers.length - 5}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {user && boardId && (
+              <PresenceIndicator boardId={boardId} currentUserId={user.id} />
             )}
             <TeamDialog 
               boardId={board.id} 
@@ -377,78 +372,67 @@ const BoardPage: React.FC = () => {
               onOpenChange={() => {}}
               canManage={true}
             />
+            <Button
+              onClick={() => setIsAddingColumn(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Column
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Board Content */}
-      <div className="flex-1 overflow-x-auto p-8">
-        <div className="flex gap-8 min-w-max pb-8">
+      <div className="flex-1 overflow-x-auto overflow-y-visible p-6">
+        <div className="flex items-start gap-6 min-w-max">
           {/* Columns */}
           {board.columns.map((column) => (
-            <div key={column.id} className="w-80 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/50 flex flex-col hover:shadow-2xl transition-all duration-300">
+            <div key={column.id} className="w-72 bg-white/60 backdrop-blur-sm rounded-xl border border-gray-200/50 shadow-lg flex flex-col h-auto">
               {/* Column Header */}
-              <div className="p-5 border-b border-gray-100/50">
-                <div className="flex items-center justify-between">
-                  {editingColumnId === column.id ? (
-                    <input
-                      type="text"
-                      value={editingColumnTitle}
-                      onChange={(e) => setEditingColumnTitle(e.target.value)}
-                      onBlur={() => {
-                        if (editingColumnTitle.trim()) {
-                          updateColumn(column.id, editingColumnTitle);
-                        }
+              <div className="p-4 border-b border-gray-200/50">
+                {editingColumnId === column.id ? (
+                  <input
+                    type="text"
+                    value={editingColumnTitle}
+                    onChange={(e) => setEditingColumnTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && editingColumnTitle.trim()) {
+                        updateColumn(column.id, editingColumnTitle);
                         setEditingColumnId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          if (editingColumnTitle.trim()) {
-                            updateColumn(column.id, editingColumnTitle);
-                          }
-                          setEditingColumnId(null);
-                        }
-                        if (e.key === "Escape") {
-                          setEditingColumnId(null);
-                        }
-                      }}
-                      autoFocus
-                      className="text-lg font-bold bg-transparent border-none outline-none w-full text-gray-800"
-                    />
-                  ) : (
-                    <h3
-                      className="text-lg font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-2 group"
-                      onClick={() => {
-                        setEditingColumnId(column.id);
-                        setEditingColumnTitle(column.title);
-                      }}
-                    >
-                      {column.title}
-                      <Edit3 className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
-                    </h3>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <span className="px-3 py-1.5 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 text-sm rounded-full font-semibold shadow-sm">
-                      {column.cards.length}
-                    </span>
-                    <button
-                      onClick={() => deleteColumn(column.id)}
-                      className="text-gray-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all hover:scale-110"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                      }
+                      if (e.key === "Escape") {
+                        setEditingColumnId(null);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (editingColumnTitle.trim()) {
+                        updateColumn(column.id, editingColumnTitle);
+                      }
+                      setEditingColumnId(null);
+                    }}
+                    autoFocus
+                    className="text-lg font-bold bg-transparent border-none outline-none w-full text-gray-800"
+                  />
+                ) : (
+                  <h3
+                    className="text-lg font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-2 group"
+                    onClick={() => {
+                      setEditingColumnId(column.id);
+                      setEditingColumnTitle(column.title);
+                    }}
+                  >
+                    {column.title}
+                  </h3>
+                )}
               </div>
 
-              {/* Cards Container */}
-              <div className="flex-1 p-5 space-y-4 min-h-[300px] max-h-[600px] overflow-y-auto custom-scrollbar">
+              {/* Cards */}
+              <div className="p-4 space-y-3 overflow-y-visible">
                 {column.cards.map((card) => (
                   <div
                     key={card.id}
-                    className={`group p-5 bg-gradient-to-br from-white to-gray-50/50 rounded-xl border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:rotate-1 ${
-                      draggingCardId === card.id ? "opacity-50 rotate-2 scale-95" : ""
-                    }`}
+                    className="group p-5 bg-gradient-to-br from-white to-gray-50/50 rounded-xl border border-gray-200/50 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:rotate-1"
                     onClick={() => setEditingCard(card)}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -512,92 +496,96 @@ const BoardPage: React.FC = () => {
                         }
                       }}
                       autoFocus
-                      className="w-full p-3 border border-blue-200 rounded-lg text-sm bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                      className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                     />
                     <div className="flex gap-2 mt-3">
-                      <button
+                      <Button
                         onClick={() => {
                           if (newCardTitle.trim()) {
                             addCard(column.id);
                           }
                         }}
-                        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-medium"
+                        size="sm"
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
                       >
                         Add Card
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => {
                           setAddingCardToColumn(null);
                           setNewCardTitle("");
                         }}
-                        className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300 transition-all font-medium"
+                        size="sm"
+                        variant="outline"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => setAddingCardToColumn(column.id)}
-                    className="flex items-center gap-2 w-full p-4 text-gray-500 hover:text-blue-600 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-300 transition-all group shadow-sm hover:shadow-md"
+                    className="w-full p-4 text-gray-500 hover:text-blue-600 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 transition-all flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 hover:border-blue-300 group"
                   >
                     <Plus className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-semibold">Add a card</span>
+                    <span className="font-medium">Add a card</span>
                   </button>
                 )}
               </div>
             </div>
           ))}
-          
+
           {/* Add Column */}
-          <div className="w-80 bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border-2 border-dashed border-blue-200 flex flex-col hover:shadow-2xl transition-all duration-300">
-            <div className="p-6 flex-1 flex items-center justify-center">
-              {isAddingColumn ? (
-                <div className="w-full space-y-4">
-                  <input
-                    type="text"
-                    value={newColumnTitle}
-                    onChange={(e) => setNewColumnTitle(e.target.value)}
-                    placeholder="Enter column title..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") addColumn();
-                      if (e.key === "Escape") {
-                        setNewColumnTitle("");
-                        setIsAddingColumn(false);
-                      }
+          <div className="w-72 flex-shrink-0">
+            {isAddingColumn ? (
+              <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-gray-200/50 shadow-lg p-4">
+                <input
+                  type="text"
+                  placeholder="Enter column title..."
+                  value={newColumnTitle}
+                  onChange={(e) => setNewColumnTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newColumnTitle.trim()) {
+                      addColumn();
+                    }
+                    if (e.key === "Escape") {
+                      setNewColumnTitle("");
+                      setIsAddingColumn(false);
+                    }
+                  }}
+                  autoFocus
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all mb-3"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    onClick={addColumn}
+                    size="sm"
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                  >
+                    Add Column
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setNewColumnTitle("");
+                      setIsAddingColumn(false);
                     }}
-                    autoFocus
-                    className="w-full p-3 border border-blue-200 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all font-medium"
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      onClick={addColumn}
-                      className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl font-semibold"
-                    >
-                      Add Column
-                    </button>
-                    <button
-                      onClick={() => {
-                        setNewColumnTitle("");
-                        setIsAddingColumn(false);
-                      }}
-                      className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all font-semibold"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                    size="sm"
+                    variant="outline"
+                  >
+                    Cancel
+                  </Button>
                 </div>
-              ) : (
-                <button
-                  className="w-full h-full min-h-[250px] text-gray-500 hover:text-blue-600 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 transition-all flex flex-col items-center justify-center gap-4 rounded-xl group"
-                  onClick={() => setIsAddingColumn(true)}
-                >
-                  <Plus className="w-12 h-12 group-hover:scale-110 transition-transform" />
-                  <span className="text-xl font-bold">Add Column</span>
-                  <span className="text-sm text-gray-400">Click to create a new column</span>
-                </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <button
+                className="w-full h-full min-h-[150px] text-gray-500 hover:text-blue-600 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 transition-all flex flex-col items-center justify-center gap-4 rounded-xl group"
+                onClick={() => setIsAddingColumn(true)}
+              >
+                <Plus className="w-12 h-12 group-hover:scale-110 transition-transform" />
+                <span className="text-xl font-bold">Add Column</span>
+                <span className="text-sm text-gray-400">Click to create a new column</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
