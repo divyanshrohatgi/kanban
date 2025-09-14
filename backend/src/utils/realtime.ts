@@ -3,15 +3,28 @@ import { Server } from "socket.io";
 import type { Server as HttpServer } from "http";
 import { PresenceService } from "../services/presenceService";
 
-let io: Server; // initialized in initSocket()
+let io: Server | undefined; // initialized in initSocket()
 
 export function initSocket(httpServer: HttpServer) {
+  // Prevent double-initialization (e.g., dev hot-reload)
+  if (io) return io;
+
   io = new Server(httpServer, {
-    cors: {
-      origin: process.env.CORS_ORIGIN?.split(",") ?? "*",
-      credentials: true,
-    },
     path: "/ws",
+    transports: ["websocket", "polling"],
+    cors: {
+      origin: process.env.CORS_ORIGIN
+        ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim())
+        : true,
+      credentials: true,
+      methods: ["GET", "POST"],
+      allowedHeaders: ["Content-Type"],
+    },
+    allowEIO3: true,
+    pingInterval: 25000,
+    pingTimeout: 60000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e6,
   });
 
   io.on("connection", (socket) => {
@@ -23,7 +36,18 @@ export function initSocket(httpServer: HttpServer) {
       if (!boardId || !userId) return;
       socket.join(`board:${boardId}`);
       const users = await PresenceService.joinBoard(boardId, userId);
-      io.to(`board:${boardId}`).emit("presence:update", { users });
+      io!.to(`board:${boardId}`).emit("presence:update", { users });
+    });
+
+    /**
+     * Join user's personal notification room.
+     * payload: { userId: string | number }
+     */
+    socket.on("join_notifications", ({ userId }) => {
+      if (!userId) return;
+      const uid = String(userId); // ✅ normalize
+      socket.join(`user:${uid}`);
+      console.log(`[ws] user joined notification room: user:${uid} (sid=${socket.id})`);
     });
 
     /**
@@ -34,7 +58,7 @@ export function initSocket(httpServer: HttpServer) {
       if (!boardId || !userId) return;
       socket.leave(`board:${boardId}`);
       const users = await PresenceService.leaveBoard(boardId, userId);
-      io.to(`board:${boardId}`).emit("presence:update", { users });
+      io!.to(`board:${boardId}`).emit("presence:update", { users });
     });
 
     /**
@@ -44,13 +68,18 @@ export function initSocket(httpServer: HttpServer) {
     socket.on("typing:start", async ({ cardId, userId }) => {
       if (!cardId || !userId) return;
       const users = await PresenceService.startTyping(cardId, userId);
-      io.to(`card:${cardId}`).emit("typing:update", { users });
+      io!.to(`card:${cardId}`).emit("typing:update", { users });
     });
 
     socket.on("typing:stop", async ({ cardId, userId }) => {
       if (!cardId || !userId) return;
       const users = await PresenceService.stopTyping(cardId, userId);
-      io.to(`card:${cardId}`).emit("typing:update", { users });
+      io!.to(`card:${cardId}`).emit("typing:update", { users });
+    });
+
+    // Optional: observe disconnects for diagnostics
+    socket.on("disconnect", (reason) => {
+      console.warn(`[ws] disconnect: ${reason} (sid=${socket.id})`);
     });
   });
 

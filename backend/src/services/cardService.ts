@@ -1,6 +1,25 @@
 import { supabase } from "../config/supabaseClient";
 
 export class CardService {
+  static async getByIdAuthorized(cardId: string, userId: string) {
+    // First check if user has access to the board this card belongs to
+    const { data: card, error } = await supabase
+      .from("cards")
+      .select(`
+        *,
+        boards!inner(
+          id,
+          board_members!inner(user_id)
+        )
+      `)
+      .eq("id", cardId)
+      .eq("boards.board_members.user_id", userId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return card;
+  }
+
   static async createAuthorized(
     params: {
       boardId: string;
@@ -75,6 +94,25 @@ export class CardService {
   }
 
   static async deleteAuthorized(cardId: string, userId: string) {
+    // First get the card info before deleting
+    const { data: cardData, error: fetchError } = await supabase
+      .from("cards")
+      .select(`
+        board_id,
+        assignee_id,
+        title,
+        boards!inner(
+          id,
+          board_members!inner(user_id)
+        )
+      `)
+      .eq("id", cardId)
+      .eq("boards.board_members.user_id", userId)
+      .single();
+    
+    if (fetchError) throw new Error(fetchError.message);
+
+    // Now delete the card
     const { data, error } = await supabase
       .from("cards")
       .delete()
@@ -82,6 +120,11 @@ export class CardService {
       .select("board_id")
       .single();
     if (error) throw new Error(error.message);
-    return { boardId: data.board_id };
+    
+    return { 
+      boardId: data.board_id,
+      assigneeId: cardData.assignee_id,
+      title: cardData.title
+    };
   }
 }

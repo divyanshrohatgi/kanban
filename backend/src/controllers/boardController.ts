@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth";
 import { BoardService } from "../services/boardService";
 import { AuditService } from "../services/auditService";
+import { NotificationService } from "../services/notificationService";
 import { getIO } from "../utils/realtime";
 
 export class BoardController {
@@ -19,6 +20,7 @@ export class BoardController {
 
       await AuditService.append(board.id, req.user.id, "BoardCreated", { boardId: board.id });
       getIO().to(`board:${board.id}`).emit("board:created", { board });
+
       return res.status(201).json(board);
     } catch (err: any) {
       return res.status(400).json({ error: err.message || "Failed to create board" });
@@ -60,6 +62,36 @@ export class BoardController {
 
       await AuditService.append(id, req.user.id, "BoardUpdated", { changes: req.body });
       getIO().to(`board:${id}`).emit("board:updated", { board: updated });
+
+      // Notify all board members about the update (except the one who made the change)
+      try {
+        const boardMembers = await BoardService.getBoardMembers(id);
+
+        // Persist notifications
+        const notificationPromises = boardMembers
+          .filter((m) => m.user_id !== req.user!.id)
+          .map((m) =>
+            NotificationService.create(
+              m.user_id,
+              "BOARD_UPDATED",
+              `Board "${updated.title}" was updated`,
+              { boardId: id }
+            )
+          );
+        await Promise.allSettled(notificationPromises);
+
+        // Emit real-time events to notified users (normalize userId)
+        const notifiedUsers = boardMembers
+          .filter((m) => m.user_id !== req.user!.id)
+          .map((m) => m.user_id);
+
+        notifiedUsers.forEach((userId) => {
+          getIO().to(`user:${String(userId)}`).emit("notification:new");
+        });
+      } catch {
+        /* ignore notification errors */
+      }
+
       return res.json(updated);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -74,6 +106,7 @@ export class BoardController {
       await BoardService.deleteAuthorized(id, req.user.id);
       await AuditService.append(id, req.user.id, "BoardDeleted", {});
       getIO().to(`board:${id}`).emit("board:deleted", { boardId: id });
+
       return res.json({ message: "Board deleted" });
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -90,6 +123,19 @@ export class BoardController {
       await AuditService.append(boardId, req.user.id, "BoardMemberAdded", { userId, role });
       getIO().to(`board:${boardId}`).emit("board:memberAdded", { userId, role });
 
+      // Notify the new member
+      try {
+        await NotificationService.create(
+          userId,
+          "BOARD_MEMBER_ADDED",
+          `You were added to a board with role: ${role}`,
+          { boardId }
+        );
+        getIO().to(`user:${String(userId)}`).emit("notification:new"); // ← normalized
+      } catch {
+        /* ignore notification errors */
+      }
+
       return res.status(201).json(member);
     } catch (err: any) {
       return res.status(400).json({ error: err.message });
@@ -105,6 +151,19 @@ export class BoardController {
       await BoardService.removeMemberAuthorized(boardId, req.user.id, userId);
       await AuditService.append(boardId, req.user.id, "BoardMemberRemoved", { userId });
       getIO().to(`board:${boardId}`).emit("board:memberRemoved", { userId });
+
+      // Notify the removed member
+      try {
+        await NotificationService.create(
+          userId,
+          "BOARD_MEMBER_REMOVED",
+          "You were removed from a board",
+          { boardId }
+        );
+        getIO().to(`user:${String(userId)}`).emit("notification:new"); // ← normalized
+      } catch {
+        /* ignore notification errors */
+      }
 
       return res.json({ message: "Member removed" });
     } catch (err: any) {
