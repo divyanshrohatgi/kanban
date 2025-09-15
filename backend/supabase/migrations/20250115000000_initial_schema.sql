@@ -4,36 +4,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =========================
--- 2) DROP legacy (auction) objects
--- =========================
-
--- Drop auction triggers & functions if they exist
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_auction_on_bid') THEN
-    DROP FUNCTION public.update_auction_on_bid() CASCADE;
-  END IF;
-  IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_auction_on_bid_trigger') THEN
-    DROP TRIGGER update_auction_on_bid_trigger ON public.bids;
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'place_bid') THEN
-    DROP FUNCTION public.place_bid(UUID, UUID, DECIMAL) CASCADE;
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'create_counter_offer') THEN
-    DROP FUNCTION public.create_counter_offer(UUID, UUID, UUID, DECIMAL) CASCADE;
-  END IF;
-END $$;
-
--- Drop auction-related tables if present (orders matter due to FKs)
-DROP TABLE IF EXISTS public.invoices CASCADE;
-DROP TABLE IF EXISTS public.counter_offers CASCADE;
-DROP TABLE IF EXISTS public.bids CASCADE;
-DROP TABLE IF EXISTS public.auctions CASCADE;
-
--- =========================
--- 3) Core users table (keep)
+-- 2) Core users table
 -- =========================
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -45,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- =========================
--- 4) Kanban schema
+-- 3) Kanban schema
 -- =========================
 
 -- Boards
@@ -93,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.cards (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Audit logs (append-only)
+-- Audit logs
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   board_id UUID NOT NULL REFERENCES public.boards(id) ON DELETE CASCADE,
@@ -103,9 +74,8 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Notifications (Kanban-specific; no auction references)
-DROP TABLE IF EXISTS public.notifications;
-CREATE TABLE public.notifications (
+-- Notifications
+CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   type VARCHAR(50) NOT NULL,
@@ -117,7 +87,7 @@ CREATE TABLE public.notifications (
 );
 
 -- =========================
--- 5) Indexes
+-- 4) Indexes
 -- =========================
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
@@ -131,10 +101,8 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(use
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON public.notifications(is_read);
 
 -- =========================
--- 6) Triggers: updated_at and optimistic version
+-- 5) Triggers: updated_at and optimistic version
 -- =========================
-
--- Generic updated_at trigger fn (shared)
 CREATE OR REPLACE FUNCTION public.touch_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -143,7 +111,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Attach to tables that have updated_at
 DROP TRIGGER IF EXISTS trg_touch_profiles ON public.profiles;
 CREATE TRIGGER trg_touch_profiles BEFORE UPDATE ON public.profiles
 FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
@@ -160,7 +127,7 @@ DROP TRIGGER IF EXISTS trg_touch_cards ON public.cards;
 CREATE TRIGGER trg_touch_cards BEFORE UPDATE ON public.cards
 FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
--- Bump card.version on every UPDATE (optimistic concurrency)
+-- Bump card.version on every UPDATE
 CREATE OR REPLACE FUNCTION public.bump_card_version()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -174,10 +141,8 @@ CREATE TRIGGER trg_bump_card_version BEFORE UPDATE ON public.cards
 FOR EACH ROW EXECUTE FUNCTION public.bump_card_version();
 
 -- =========================
--- 7) Optional: RPC helpers for atomic updates (if you want to use supabase.rpc)
+-- 6) RPC helpers
 -- =========================
-
--- Update card with version guard (returns updated row or NULL if conflict)
 CREATE OR REPLACE FUNCTION public.update_card_with_version(
   p_id UUID,
   p_version INTEGER,
@@ -200,14 +165,13 @@ BEGIN
   RETURNING * INTO _row;
 
   IF NOT FOUND THEN
-    RETURN; -- returns 0 rows -> client treats as version conflict
+    RETURN; -- version conflict
   END IF;
 
   RETURN NEXT _row;
 END;
 $$;
 
--- Atomically move a card to another column + position (you can enhance with reindexing logic)
 CREATE OR REPLACE FUNCTION public.move_card_atomic(
   p_card_id UUID,
   p_version INTEGER,
@@ -235,7 +199,7 @@ END;
 $$;
 
 -- =========================
--- 8) Row Level Security (disabled for server-side service role)
+-- 7) Row Level Security (disabled)
 -- =========================
 ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.boards DISABLE ROW LEVEL SECURITY;
